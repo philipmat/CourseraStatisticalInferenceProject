@@ -1,0 +1,139 @@
+---
+title: "Statistical Inference - Course Project - Part 2"
+author: "Philip Mateescu"
+date: "November 18, 2015"
+output: pdf_document
+---
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(datasets)
+library(dplyr)
+library(knitr)
+```
+
+# The Effect of Vitamin C on Tooth Growth in Guinea Pigs
+
+## Summary
+
+We will analyze a dataset containing the length of odontoblasts (teeth) in each of 10 guinea pigs at each of three dose levels of Vitamin C (0.5, 1, and 2 mg) with each of two delivery methods (orange juice or ascorbic acid).
+
+This source of this dataset is the paper called [The Growth of the Odontoblasts of the Incisor Tooth as a Criterion of the Vitamin C Intake of the Guinea Pig](http://jn.nutrition.org/content/33/5/491.full.pdf) by E. W. Crampton, published in 1946, and cited in the [Statistics of Bioassay](http://onlinelibrary.wiley.com/doi/10.1002/jps.3030420425/abstract) by C. I. Bliss publised by the Academic Press Inc in 1953.
+
+The dataset contains 60 observations of 3 variables:
+
+1. `len` - tooth length; numeric
+2. `supp` - supplement type, *VC* - ascorbic acid, or *OJ* - orange juice; factor.
+3. `dose` - dose in milligrams; numeric, discrete: 0.5, 1, or 2 mg
+
+Here is a sample of the dataset:
+```{r}
+kable(ToothGrowth[c(10:13,50:52),], caption = 'T1. Sample Data')
+```
+
+## Comparison of Tooth Growth
+
+First let's examine the data through a box plot.
+
+```{r}
+ggplot(data=ToothGrowth, aes(y=len, x=supp, fill=supp)) + 
+    geom_boxplot() +
+    facet_wrap(~dose) + 
+    labs(title="Tooth Growth by Dose and Supplement Type", x='Dose (mg) / Supplement Type', y='Tooth length') +
+    guides(fill=guide_legend('Supplement Type')) + theme(legend.position = "none")
+```
+
+We immediately notice that there seems to be a positive correlation between the dose type and the growth.
+
+There is some obvious variance in the data. Let's examine a few questions we might have.
+
+### How much variance in the growth can be attributed to the supplement type?
+
+To answer this question, we will examine the *t-statistic* and the *p-value* for each length by supplement,
+for each individual dose. 
+The observations are obviously not paired, and from the chart above we can tell the variance between the sets
+of observations are not equal.
+
+```{r}
+mkci <- function(ttestval) {
+    paste('[ ', round(ttestval$conf.int[1], 4), ', ', round(ttestval$conf.int[2], 4), ' ]', sep='')
+}
+dose.test <- function(dose) {
+    dose.set <- ToothGrowth[which(ToothGrowth$dose == dose), c('len', 'supp')]
+    t.test(len ~ supp, data=dose.set, paired = F, var.equal = F)
+}
+d05 <- dose.test(0.5)
+d1 <- dose.test(1)
+d2 <- dose.test(2)
+
+df <- data.frame(
+    dose=c(0.5, 1, 2),
+    t.statistic=c(d05$statistic, d1$statistic, d2$statistic),
+    p.value=c(d05$p.value, d1$p.value, d2$p.value),
+    conf.int=c(mkci(d05), mkci(d1), mkci(d2))
+)
+colnames(df) <- c('Dose', 't-statistic', 'p-value', '95% Confidence Interval')
+kable(df, caption = 'T2. Supplement Effect on Growth')
+```
+
+## How much variance can be attributed to the dose?
+
+We will now perform the same investigation as above, except this time we will investigate 
+the effect of the various doses by supplement type.
+
+```{r}
+supp.test <- function(supp, dose) {
+    supp.set <- ToothGrowth[which(ToothGrowth$supp == supp & ToothGrowth$dose %in% dose), c('len', 'dose')]
+    t.test(len ~ dose, data=supp.set, paired = F, var.equal = F)
+}
+d.oj.5vs1 <- supp.test('OJ', c(0.5, 1))
+d.oj.1vs2 <- supp.test('OJ', c(1, 2))
+d.vc.5vs1 <- supp.test('VC', c(0.5, 1))
+d.vc.1vs2 <- supp.test('VC', c(1, 2))
+
+df <- data.frame(
+    supp.dose=c('OJ 0.5 vs 1mg', 'OJ 1 vs 2mg', 'VC 0.5 vs 1mg', 'VC 1 vs 2mg'),
+    t.statistic=c(d.oj.5vs1$statistic, d.oj.1vs2$statistic, d.vc.5vs1$statistic, d.vc.1vs2$statistic),
+    p.value=c(d.oj.5vs1$p.value, d.oj.1vs2$p.value, d.vc.5vs1$p.value, d.vc.1vs2$p.value),
+    conf.int=c(mkci(d.oj.5vs1), mkci(d.oj.1vs2), mkci(d.vc.5vs1), mkci(d.vc.1vs2))
+)
+colnames(df) <- c('Supplement Type/Dose', 't-statistic', 'p-value', '95% Confidence Interval')
+kable(df, caption='T3. Supplement Effect on Growth')
+```
+
+## Conclusions
+
+From the study we propose two null-hypotheses:
+
+1. Supplement type has no effect on growth
+2. Dosage has no effect on growth
+
+Using the calculations we performed above, let's examine each.
+
+#### H~0~: Supplement Type Has No Effect on Growth
+From examining the second table (T2), we can conclude:
+
+- At **0.5mg dose level** we can reject the null hypothesis as there is statistically significant difference between
+  the means of **OJ** and **VC**; we notice that the *95% confidence interval* does not include 0, and
+  the *p-value* is very small at *alpha* = 0.05;
+- The same can be said for the **1mg dose level**, thus we reject the null hypothesis for this dose too: the *VC* has 
+  significant improvement on tooth growth;
+- At the **2mg dose level**, the story reverses as it seems that the supplement type does not produce a 
+  statistically significant difference between *OJ* and *VC*; we thus fail to reject the null hypothesis
+  at the *95% confidence level*.
+  
+  
+#### H~0~: Dosage Has No Effect on Growth
+
+Unlike the supplement type, the dose has a statistically significant impact on all supplement delivery types (Table 3).
+
+- For **OJ**, the *p-value* as very small when testing between **0.5mg and 1mg doses**, as well as between **1mg and 2mg**;
+  furthermore, for either test 0 is not in the *95% confidence interval;
+  as such, we can confidently reject the null hypothesis for the *OJ* supplement at all doses.
+- Similarly, we can also reject the null hypothesis for **VC** at **all dose levels**: the dose has a 
+  statistically significant impact on the growth of teeth.
+
+Worth noting that the sample size being small for each one of the supplement-dosage combination, the test power
+is quite reduce. We would need a bigger sample in order to detect more significant differences between the 
+various combinations.
+
+  
